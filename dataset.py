@@ -11,25 +11,25 @@ import cv2
 class GoogleEarth(Dataset):  # 继承Dataset
     def __init__(self, args, split='train'):  # __init__是初始化该类的一些基础参数
         if split == 'train':
-            self.img_name = os.listdir('/UsrFile/yjc/xzq/ssddata/csy/GoogleEarth/train2014_input/')
-            self.input_path = '/UsrFile/yjc/xzq/ssddata/csy/GoogleEarth/train2014_input/'
-            self.label_path = '/UsrFile/yjc/xzq/ssddata/csy/GoogleEarth/train2014_label/'
-            self.template_path = '/UsrFile/yjc/xzq/ssddata/csy/GoogleEarth/train2014_template/'
+            self.img_name = os.listdir('/ws/data/Homography/Dataset/GoogleEarth/train2014_input/')
+            self.input_path = '/ws/data/Homography/Dataset/GoogleEarth/train2014_input/'
+            self.label_path = '/ws/data/Homography/Dataset/GoogleEarth/train2014_label/'
+            self.template_path = '/ws/data/Homography/Dataset/GoogleEarth/train2014_template/'
 
         elif split == 'validation':
             if args.dataset=='ggearth':
-                self.img_name = os.listdir('/UsrFile/yjc/xzq/ssddata/csy/GoogleEarth/val2014_input/')
-                self.input_path = '/UsrFile/yjc/xzq/ssddata/csy/GoogleEarth/val2014_input/'
-                self.label_path = '/UsrFile/yjc/xzq/ssddata/csy/GoogleEarth/val2014_label/'
-                self.template_path = '/UsrFile/yjc/xzq/ssddata/csy/GoogleEarth/val2014_template/'
-                self.template_path_org = '/UsrFile/yjc/xzq/ssddata/csy/GoogleEarth/val2014_template_original/'
+                self.img_name = os.listdir('/ws/data/Homography/Dataset/GoogleEarth/val2014_input/')
+                self.input_path = '/ws/data/Homography/Dataset/GoogleEarth/val2014_input/'
+                self.label_path = '/ws/data/Homography/Dataset/GoogleEarth/val2014_label/'
+                self.template_path = '/ws/data/Homography/Dataset/GoogleEarth/val2014_template/'
+                self.template_path_org = '/ws/data/Homography/Dataset/GoogleEarth/val2014_template_original/'
                 print('org_dataset')
 
             if args.dataset=='ggmap':
-                self.img_name = os.listdir('/UsrFile/yjc/xzq/ssddata/csy/GoogleMap/val2014_input/')
-                self.input_path = '/UsrFile/yjc/xzq/ssddata/csy/GoogleMap/val2014_input/'
-                self.label_path = '/UsrFile/yjc/xzq/ssddata/csy/GoogleMap/val2014_label/'
-                self.template_path = '/UsrFile/yjc/xzq/ssddata/csy/GoogleMap/val2014_template/'
+                self.img_name = os.listdir('/ws/data/Homography/Dataset/GoogleMap/val2014_input/')
+                self.input_path = '/ws/data/Homography/Dataset/GoogleMap/val2014_input/'
+                self.label_path = '/ws/data/Homography/Dataset/GoogleMap/val2014_label/'
+                self.template_path = '/ws/data/Homography/Dataset/GoogleMap/val2014_template/'
 
         print(len(self.img_name))
 
