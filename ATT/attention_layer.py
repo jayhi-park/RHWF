@@ -7,6 +7,7 @@ import math
 import time
 import sys
 import torchvision
+from utils import *
 
 
 class LayerNormFunction(torch.autograd.Function):
@@ -51,7 +52,6 @@ def padding(input, pad_size):
     t_input = torch.zeros((B, H + 2*pad_size, W + 2*pad_size, C), dtype=torch.float32, device=input.device)
     t_input[:, pad_size:pad_size+H, pad_size:pad_size+W, :] = input.clone()
     return t_input.contiguous()
-
 
 class ChannelAttention(Function):
     kernel_size = 5
@@ -102,65 +102,116 @@ class ChannelAttention(Function):
         return grad_output1, grad_output2.permute(0, 3, 1, 2), None, None, None
 
 
-class Correlation(Function):
+# class Correlation(Function):
+#
+#     def __init__(self, kernel_size=3, pad_size=1, stride=1):
+#         super(Correlation, self).__init__()
+#         self.pad_size = pad_size
+#         self.kernel_size = kernel_size
+#         self.stride = 1
+#
+#     @staticmethod
+#     def forward(ctx, input1, input2, kernel_size = 5, pad_size = 2, stride = 1):
+#         ctx.save_for_backward(input1, input2)
+#         ctx.kernel_size = kernel_size
+#         ctx.pad_size = pad_size
+#         ctx.stride = stride
+#
+#         B, C, H, W = input1.shape
+#         out_H = (H - kernel_size + 2 * pad_size) // stride + 1
+#         out_W = (W - kernel_size + 2 * pad_size) // stride + 1
+#         out_C = kernel_size * kernel_size
+#
+#         output = torch.zeros((B, out_H, out_W, out_C), dtype=torch.float32, device=input1.device)
+#         input1 = input1.permute(0, 2, 3, 1).contiguous()
+#         input2 = input2.permute(0, 2, 3, 1).contiguous()
+#
+#         t_input1 = padding(input1, pad_size)
+#         t_input2 = padding(input2, pad_size)
+#
+#         at_cuda.forward(t_input1.contiguous(), t_input2.contiguous(), output, kernel_size, pad_size, stride)
+#
+#         return output
+#
+#     @staticmethod
+#     def backward(ctx, grad_output):
+#         input1, input2 = ctx.saved_tensors
+#         kernel_size = ctx.kernel_size
+#         pad_size = ctx.pad_size
+#         stride = ctx.stride
+#
+#         B, C, H, W = input1.shape
+#         out_H = (H - kernel_size + 2 * pad_size) // stride + 1
+#         out_W = (W - kernel_size + 2 * pad_size) // stride + 1
+#         out_C = kernel_size * kernel_size
+#
+#         input1 = input1.permute(0, 2, 3, 1).contiguous()
+#         input2 = input2.permute(0, 2, 3, 1).contiguous()
+#
+#         t_input1 = padding(input1, pad_size)
+#         t_input2 = padding(input2, pad_size)
+#
+#         g1 = torch.zeros_like(t_input1).contiguous()
+#         g2 = torch.zeros_like(input1).contiguous()
+#         grad_input = grad_output
+#         grad_input_padding = padding(grad_input, pad_size)
+#
+#         at_cuda.backward(t_input1.contiguous(), t_input2.contiguous(), grad_input.contiguous(), grad_input_padding.contiguous(),
+#             g1, g2, kernel_size, pad_size, stride)
+#
+#         return g1[:, pad_size:-pad_size, pad_size:-pad_size, :].permute(0, 3, 1, 2), g2.permute(0, 3, 1, 2), None, None, None
 
-    def __init__(self, kernel_size=3, pad_size=1, stride=1):
-        super(Correlation, self).__init__()
-        self.pad_size = pad_size
-        self.kernel_size = kernel_size
-        self.stride = 1
+class CorrBlock:
+    def __init__(self):
+        super(CorrBlock, self).__init__()
 
-    @staticmethod
-    def forward(ctx, input1, input2, kernel_size = 5, pad_size = 2, stride = 1):
-        ctx.save_for_backward(input1, input2)
-        ctx.kernel_size = kernel_size
-        ctx.pad_size = pad_size
-        ctx.stride = stride
-
+    def __call__(self, input1, input2, kernel_size=5, pad_size=2, stride=1):
+        # input
         B, C, H, W = input1.shape
         out_H = (H - kernel_size + 2 * pad_size) // stride + 1
         out_W = (W - kernel_size + 2 * pad_size) // stride + 1
         out_C = kernel_size * kernel_size
 
-        output = torch.zeros((B, out_H, out_W, out_C), dtype=torch.float32, device=input1.device)
-        input1 = input1.permute(0, 2, 3, 1).contiguous()
-        input2 = input2.permute(0, 2, 3, 1).contiguous()
+        # output = torch.zeros((B, out_H, out_W, out_C), dtype=torch.float32, device=input1.device)
+        # input1 = input1.permute(0, 2, 3, 1).contiguous() # (B, H, W, C)
+        # input2 = input2.permute(0, 2, 3, 1).contiguous() # (B, H, W, C)
 
-        t_input1 = padding(input1, pad_size)
-        t_input2 = padding(input2, pad_size)
+        # t_input1 = padding(input1, pad_size) # (B, H + 2*pad_size, W + 2*pad_size, C)
+        # t_input2 = padding(input2, pad_size) # (B, H + 2*pad_size, W + 2*pad_size, C)
 
-        at_cuda.forward(t_input1.contiguous(), t_input2.contiguous(), output, kernel_size, pad_size, stride)
-                    
+        # calculate corr_pyramid
+        corr = CorrBlock.corr(input1, input2)
+        batch, h1, w1, dim, h2, w2 = corr.shape # (B, H, W, 1, H, W)
+        corr = corr.reshape(batch * h1 * w1, dim, h2, w2)
+
+        # make coordinate
+        coords = coords_grid(batch, h1, w1).to(input1.device)
+        coords = coords.permute(0, 2, 3, 1)
+        batch, h1, w1, _ = coords.shape # (B, H, W, 2)
+
+        dx = torch.linspace(-pad_size, pad_size, 2 * pad_size + 1)
+        dy = torch.linspace(-pad_size, pad_size, 2 * pad_size + 1)
+        delta = torch.stack(torch.meshgrid(dy, dx), axis=-1).to(coords.device)
+
+        centroid_lvl = coords.reshape(batch * h1 * w1, 1, 1, 2)
+        delta_lvl = delta.view(1, 2 * pad_size + 1, 2 * pad_size + 1, 2)
+        coords_lvl = centroid_lvl + delta_lvl
+
+        corr = bilinear_sampler(corr, coords_lvl)
+        output = corr.view(batch, h1, w1, -1) # (B, H, W, 2r+1, 2r+1)
+
         return output
 
     @staticmethod
-    def backward(ctx, grad_output):
-        input1, input2 = ctx.saved_tensors
-        kernel_size = ctx.kernel_size
-        pad_size = ctx.pad_size
-        stride = ctx.stride
+    def corr(fmap1, fmap2):
+        batch, dim, ht, wd = fmap1.shape
+        fmap1 = fmap1.view(batch, dim, ht * wd)
+        fmap2 = fmap2.view(batch, dim, ht * wd)
 
-        B, C, H, W = input1.shape
-        out_H = (H - kernel_size + 2 * pad_size) // stride + 1
-        out_W = (W - kernel_size + 2 * pad_size) // stride + 1
-        out_C = kernel_size * kernel_size
+        corr = torch.relu(torch.matmul(fmap1.transpose(1, 2), fmap2))
+        corr = corr.view(batch, ht, wd, 1, ht, wd)
 
-        input1 = input1.permute(0, 2, 3, 1).contiguous()
-        input2 = input2.permute(0, 2, 3, 1).contiguous()
-
-        t_input1 = padding(input1, pad_size)
-        t_input2 = padding(input2, pad_size)
-
-        g1 = torch.zeros_like(t_input1).contiguous()
-        g2 = torch.zeros_like(input1).contiguous()
-        grad_input = grad_output
-        grad_input_padding = padding(grad_input, pad_size)
-
-        at_cuda.backward(t_input1.contiguous(), t_input2.contiguous(), grad_input.contiguous(), grad_input_padding.contiguous(), 
-            g1, g2, kernel_size, pad_size, stride)
-
-        return g1[:, pad_size:-pad_size, pad_size:-pad_size, :].permute(0, 3, 1, 2), g2.permute(0, 3, 1, 2), None, None, None
-
+        return corr
 
 class PositionwiseFeedForward(nn.Module):
     """ A two-feed-forward-layer module """
@@ -185,9 +236,10 @@ class single_head_local_attention(nn.Module):
     def __init__(self, temperature):
         super().__init__()
         self.temperature = temperature
+        self.corr_fn = CorrBlock()
 
     def forward(self, q, k, v, kernel, pad, show=False):
-        corr = Correlation.apply(q, k, kernel, pad)
+        corr = self.corr_fn(q, k, kernel, pad)
         corr = torch.softmax(corr / self.temperature, dim=3)
         result = ChannelAttention.apply(corr, v, kernel, pad)
         if show:

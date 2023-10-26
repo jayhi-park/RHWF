@@ -9,7 +9,7 @@ import scipy.io as io
 from utils import *
 from encoder import RHWF_Encoder
 from decoder import GMA_update
-from ATT.attention_layer import Correlation, FocusFormer_Attention
+from ATT.attention_layer import Correlation, CorrBlock, FocusFormer_Attention
 
 
 class Get_Flow(nn.Module):
@@ -135,6 +135,7 @@ class RHWF(nn.Module):
             sz = fmap1_32.shape
             self.sz = sz
             self.get_flow_now_4 = Get_Flow(sz)
+            corr_fn = CorrBlock()
             
             for itr in range(iters_lev0):
                 if itr < 6:
@@ -143,7 +144,7 @@ class RHWF(nn.Module):
                    fmap1, fmap2 = self.transformer_0(fmap1_32, fmap2_32, 3, 1)
                     
                 coords1 = coords1.detach()
-                corr = F.relu(Correlation.apply(fmap1.contiguous(), fmap2.contiguous(), self.kernel_0, self.pad_0)) 
+                corr = F.relu(corr_fn(fmap1.contiguous(), fmap2.contiguous(), self.kernel_0, self.pad_0))
                 b, h, w, _ = corr.shape
                 corr_1 = F.avg_pool2d(corr.view(b, h*w, self.kernel_0, self.kernel_0), 2).view(b, h, w, 64).permute(0, 3, 1, 2)
                 corr_2 = corr.view(b, h*w, self.kernel_0, self.kernel_0)
@@ -192,7 +193,7 @@ class RHWF(nn.Module):
                     fmap1, fmap2 = self.transformer_1(fmap1_64, fmap2_64, 3, 1)
                 
                 coords1 = coords1.detach()
-                corr = F.relu(Correlation.apply(fmap1.contiguous(), fmap2.contiguous(), self.kernel_1, self.pad_1)).permute(0, 3, 1, 2)    
+                corr = F.relu(corr_fn(fmap1.contiguous(), fmap2.contiguous(), self.kernel_1, self.pad_1)).permute(0, 3, 1, 2)
                 
                 corr = self.conv1_1(corr)   
                 flow = coords1 - coords0
