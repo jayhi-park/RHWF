@@ -9,7 +9,7 @@ import scipy.io as io
 from utils import *
 from encoder import RHWF_Encoder
 from decoder import GMA_update
-from ATT.attention_layer import Correlation, CorrBlock, FocusFormer_Attention
+from ATT.attention_layer import CorrBlock, FocusFormer_Attention
 
 
 class Get_Flow(nn.Module):

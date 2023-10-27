@@ -168,16 +168,6 @@ class CorrBlock:
     def __call__(self, input1, input2, kernel_size=5, pad_size=2, stride=1):
         # input
         B, C, H, W = input1.shape
-        out_H = (H - kernel_size + 2 * pad_size) // stride + 1
-        out_W = (W - kernel_size + 2 * pad_size) // stride + 1
-        out_C = kernel_size * kernel_size
-
-        # output = torch.zeros((B, out_H, out_W, out_C), dtype=torch.float32, device=input1.device)
-        # input1 = input1.permute(0, 2, 3, 1).contiguous() # (B, H, W, C)
-        # input2 = input2.permute(0, 2, 3, 1).contiguous() # (B, H, W, C)
-
-        # t_input1 = padding(input1, pad_size) # (B, H + 2*pad_size, W + 2*pad_size, C)
-        # t_input2 = padding(input2, pad_size) # (B, H + 2*pad_size, W + 2*pad_size, C)
 
         # calculate corr_pyramid
         corr = CorrBlock.corr(input1, input2)
@@ -197,8 +187,9 @@ class CorrBlock:
         delta_lvl = delta.view(1, 2 * pad_size + 1, 2 * pad_size + 1, 2)
         coords_lvl = centroid_lvl + delta_lvl
 
-        corr = bilinear_sampler(corr, coords_lvl)
-        output = corr.view(batch, h1, w1, -1) # (B, H, W, 2r+1, 2r+1)
+        corr = bilinear_sampler(corr, coords_lvl, mask=True)
+        corr = corr.reshape(-1, 2 * pad_size + 1, 2 * pad_size + 1).transpose(-2, -1) # (B * H * W, 2r+1, 2r+1)
+        output = corr.reshape(batch, h1, w1, -1) # (B, H, W, 2r+1 * 2r+1)
 
         return output
 

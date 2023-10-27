@@ -18,6 +18,7 @@ from evaluate import validate_process
 
 def main(args):
     device = torch.device('cuda:'+ str(args.gpuid[0]))
+    print(f"device: {device}")
 
     model = RHWF(args)
     model.cuda()
@@ -43,6 +44,7 @@ def main(args):
     scaler = GradScaler(enabled=args.mixed_precision)
     logger = Logger(model, scheduler, args)
 
+    # epoch
     while logger.total_steps <= args.num_steps:
         train(model, train_loader, optimizer, scheduler, logger, scaler, args)
         if logger.total_steps >= args.num_steps:
@@ -122,7 +124,7 @@ if __name__ == '__main__':
     parser.add_argument('--validation', type=str, nargs='+')
     parser.add_argument('--restore_ckpt', help="restore checkpoint")
     
-    parser.add_argument('--gpuid', type=int, nargs='+', default = [0])
+    parser.add_argument('--gpuid', type=int, nargs='+', default = [0, 1])
     parser.add_argument('--output', type=str, default='results/ggearth_6_6', help='output directory to save checkpoints and plots')
     parser.add_argument('--logname', type=str, default='ggearth_6_6.log', help='printing frequency')
     parser.add_argument('--dataset', type=str, default='ggearth', help='dataset')
