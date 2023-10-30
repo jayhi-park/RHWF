@@ -9,7 +9,7 @@ import scipy.io as io
 from utils import *
 from encoder import RHWF_Encoder
 from decoder import GMA_update
-from ATT.attention_layer import CorrBlock, FocusFormer_Attention
+from ATT.attention_layer import CorrBlock, FocusFormer_Attention # Correlation
 
 
 class Get_Flow(nn.Module):
@@ -145,6 +145,7 @@ class RHWF(nn.Module):
                     
                 coords1 = coords1.detach()
                 corr = F.relu(corr_fn(fmap1.contiguous(), fmap2.contiguous(), self.kernel_0, self.pad_0))
+                # corr = F.relu(Correlation.apply(fmap1.contiguous(), fmap2.contiguous(), self.kernel_0, self.pad_0))
                 b, h, w, _ = corr.shape
                 corr_1 = F.avg_pool2d(corr.view(b, h*w, self.kernel_0, self.kernel_0), 2).view(b, h, w, 64).permute(0, 3, 1, 2)
                 corr_2 = corr.view(b, h*w, self.kernel_0, self.kernel_0)
@@ -194,7 +195,8 @@ class RHWF(nn.Module):
                 
                 coords1 = coords1.detach()
                 corr = F.relu(corr_fn(fmap1.contiguous(), fmap2.contiguous(), self.kernel_1, self.pad_1)).permute(0, 3, 1, 2)
-                
+                # corr = F.relu(Correlation.apply(fmap1.contiguous(), fmap2.contiguous(), self.kernel_1, self.pad_1)).permute(0, 3, 1, 2)
+
                 corr = self.conv1_1(corr)   
                 flow = coords1 - coords0
                 corr_flow = torch.cat((corr, flow), dim=1)

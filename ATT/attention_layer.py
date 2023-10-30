@@ -9,8 +9,6 @@ import sys
 import torchvision
 from utils import *
 
-# cnt = 0
-
 class LayerNormFunction(torch.autograd.Function):
     @staticmethod
     def forward(ctx, x, weight, bias, eps):
@@ -102,8 +100,8 @@ def padding(input, pad_size):
 #         at_cuda.channel_backward(input1.contiguous(), t_input2.contiguous(), grad_input.contiguous(), grad_output1.contiguous(), grad_output2.contiguous(),
 #             kernel_size, pad_size, stride)
 #         return grad_output1, grad_output2.permute(0, 3, 1, 2), None, None, None
-
-
+#
+#
 # class Correlation(Function):
 #
 #     def __init__(self, kernel_size=3, pad_size=1, stride=1):
@@ -211,87 +209,23 @@ def channel_attention(attns, v, kernel_size=5, pad_size=2, stride=1):
     # v shape = (B, C, H, W)
 
     # reshape attention
-    B, H, W, _ = attns.shape
-    attns = attns.view(B, H*W, -1, 1) # (B, H * W, kernel * kernel, 1)
+    B, H, W, C1 = attns.shape # C1 = kernel * kernel
 
     # make region of v
-    B, C, H, W = v.shape
+    B, C2, H, W = v.shape
+    v = v.permute(0, 2, 3, 1) # (B, H, W, C2)
+    t_v = padding(v, pad_size) # (B, H + 2r, W + 2r, C2)
 
-    coords = coords_grid(B, H, W).to(v.device)
-    coords = coords.permute(0, 2, 3, 1).contiguous()
-    batch, h1, w1, _ = coords.shape  # (B, H, W, 2)
+    output = torch.zeros_like(v) # (B, H, W, C2)
 
-    dx = torch.linspace(-pad_size, pad_size, 2 * pad_size + 1)
-    dy = torch.linspace(-pad_size, pad_size, 2 * pad_size + 1)
-    delta = torch.stack(torch.meshgrid(dy, dx), axis=-1).to(coords.device)
+    for ch in range(C1):
+        dx = int(ch % kernel_size)
+        dy = int(ch / kernel_size)
 
-    centroid_lvl = coords.view(B * H * W, 1, 1, 2)
-    delta_lvl = delta.view(1, 2 * pad_size + 1, 2 * pad_size + 1, 2)
-    coords_lvl = centroid_lvl + delta_lvl
+        output = output + attns[..., ch].unsqueeze(-1) * t_v[:, dy:dy+H, dx:dx+W, :] # (B, H, W, C2)
 
-    v = torch.cat([v[0].repeat(H*W, 1, 1, 1), v[1].repeat(H*W, 1, 1, 1)], dim=0)
-    v = bilinear_sampler(v, coords_lvl, mask = True) # (B * H * W, C, kernel, kernel)
-
-    # v_kk = torch.zeros((B*H*W, C, kernel_size, kernel_size)).to(v)
-    # for b in range(B):
-    #     v_kk[b*H*W:(b+1)*H*W] = bilinear_sampler(v[b].repeat(H*W, 1, 1, 1), coords_lvl[b*H*W:(b+1)*H*W], mask = True)
-    # v = v_kk
-
-    v = v.view(-1, C, 2 * pad_size + 1, 2 * pad_size + 1).transpose(-2, -1).contiguous()
-    v = v.view(batch, h1 * w1, -1, kernel_size * kernel_size) # (B, H * W, C, kernel * kernel)
-    v = v.permute(0, 1, 3, 2) # (B, H * W, kernel * kernel, C)
-
-    # attention
-    output = attns * v # (B, H * W, kernel * kernel, C)
-    output = torch.sum(output, dim = -2) # (B, H * W, C)
-    output = output.view(batch, h1, w1, -1)
-    output = output.permute(0, 3, 1, 2) # (B, C, H, W)
+    output = output.permute(0, 3, 1, 2) # (B, C2, H, W)
     return output
-
-# def channel_attention_v2(attns, v, kernel_size=5, pad_size=2, stride=1):
-#     # attns shape = (B, H, W, kernel * kernel)
-#     # v shape = (B, C, H, W)
-#
-#     # reshape attention
-#     B, H, W, _ = attns.shape
-#     attns = attns.view(B, H*W, -1, 1) # (B, H * W, kernel * kernel, 1)
-#
-#     # make region of v
-#     B, C, H, W = v.shape
-#
-#     coords = coords_grid(B, H, W).to(v.device)
-#     coords = coords.permute(0, 2, 3, 1).contiguous()
-#     batch, h1, w1, _ = coords.shape  # (B, H, W, 2)
-#
-#     dx = torch.linspace(-pad_size, pad_size, 2 * pad_size + 1)
-#     dy = torch.linspace(-pad_size, pad_size, 2 * pad_size + 1)
-#     delta = torch.stack(torch.meshgrid(dy, dx), axis=-1).to(coords.device)
-#
-#     centroid_lvl = coords.view(B * H * W, 1, 1, 2)
-#     delta_lvl = delta.view(1, 2 * pad_size + 1, 2 * pad_size + 1, 2)
-#     coords_lvl = centroid_lvl + delta_lvl
-#
-#     output = torch.zeros((B, H, W, C)).to(v)
-#     for b in range(B):
-#         for h in range(H):
-#             for w in range(W):
-#                 v_kk = bilinear_sampler(v[b].unsqueeze(0), coords_lvl[(b * H * W) + (h * W) + w].unsqueeze(0), mask=True)  # (1, C, kernel, kernel)
-#                 v_kk = v_kk.view(-1, C, 2 * pad_size + 1, 2 * pad_size + 1).transpose(-2, -1).contiguous()
-#                 v_kk = v_kk.view(1, -1, kernel_size * kernel_size)  # (1, C, kernel * kernel)
-#                 v_kk = v_kk.permute(0, 2, 1)  # (1, kernel * kernel, C)
-#
-#                 # attention
-#                 output[b, h, w] = torch.sum(attns[b, (h * W) + w] * v_kk, dim=-2)  # (C)
-#         # v_kk = bilinear_sampler(v[b].repeat(H*W, 1, 1, 1), coords_lvl[b*H*W:(b+1)*H*W], mask = True) # (H * W, C, kernel, kernel)
-#         # v_kk = v_kk.view(-1, C, 2 * pad_size + 1, 2 * pad_size + 1).transpose(-2, -1).contiguous()
-#         # v_kk = v_kk.view(h1 * w1, -1, kernel_size * kernel_size) # (H * W, C, kernel * kernel)
-#         # v_kk = v_kk.permute(0, 2, 1) # (H * W, kernel * kernel, C)
-#         #
-#         # # attention
-#         # output[b] = torch.sum(attns[b] * v_kk, dim = -2).view(h1, w1, -1) # (H, W, C)
-#
-#     output = output.permute(0, 3, 1, 2) # (B, C, H, W)
-#     return output
 
 class PositionwiseFeedForward(nn.Module):
     """ A two-feed-forward-layer module """
@@ -320,12 +254,10 @@ class single_head_local_attention(nn.Module):
 
     def forward(self, q, k, v, kernel, pad, show=False):
         corr = self.corr_fn(q, k, kernel, pad)
+        # corr = Correlation.apply(q, k, kernel, pad)
         corr = torch.softmax(corr / self.temperature, dim=3)
         result = channel_attention(corr, v, kernel, pad)
-
-        # global cnt
-        # cnt += 1
-        # print(cnt)
+        # result = ChannelAttention.apply(corr, v, kernel, pad)
 
         if show:
             return result, corr
