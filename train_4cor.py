@@ -19,15 +19,25 @@ from wandb_logger import WandbLogger
 
 def train(args):
     # device
-    device = torch.device('cuda:'+ str(args.gpuid[1]))
+    device = torch.device('cuda:'+ str(args.gpuid[0]))
     print(f"device: {device}")
+
+    # dataset
+    if args.dataset == 'ggearth':
+        import dataset as datasets
+    else:
+        import datasets_4cor_img as datasets
+
+    train_loader = datasets.fetch_dataloader(args, split="train")
+    scaler = GradScaler(enabled=args.mixed_precision)
 
     # model
     model = RHWF(args)
     model.cuda()
     model.train()
     print(f"Parameter Count: {count_parameters(model)}")
-    optimizer, scheduler = fetch_optimizer(args, model)
+    steps_per_epoch = len(train_loader)
+    optimizer, scheduler = fetch_optimizer(args, steps_per_epoch, model)
 
     # restore
     if args.restore_ckpt is not None:
@@ -37,14 +47,6 @@ def train(args):
         optimizer.load_state_dict(save_model['optimizer'])
         scheduler.load_state_dict(save_model['scheduler'])
 
-    # dataset
-    if args.dataset=='ggearth':
-        import dataset as datasets
-    else:
-        import datasets_4cor_img as datasets
-        
-    train_loader = datasets.fetch_dataloader(args, split="train")
-    scaler = GradScaler(enabled=args.mixed_precision)
     # logger = Logger(model, scheduler, args)
 
     # log
@@ -56,10 +58,12 @@ def train(args):
         wandb_logger = WandbLogger(None)
 
     # epoch
+    total_epochs = 0
     total_steps = 0
     best_results = {'val/mace': 100}
 
-    while total_steps <= args.num_steps:
+    while total_epochs < args.num_epochs:
+    # while total_steps < args.num_steps:
         for i_batch, data_blob in enumerate(train_loader):
             tic = time.time()
             image1, image2, image2w, flow,  H  = [x.cuda() for x in data_blob]
@@ -94,10 +98,10 @@ def train(args):
             # log
             if total_steps % args.train_freq == 0:
                 wandb_logger.log_dict({'training/loss': loss})
-                time_left_sec = int(((args.num_steps - (total_steps+1)) * (toc - tic)))
+                time_left_sec = int(((args.num_epochs*steps_per_epoch - total_steps) * (toc - tic)))
                 time_left_hms = "{:02d}h{:02d}m{:02d}s".format(time_left_sec // 3600, time_left_sec % 3600 // 60,
                                                                time_left_sec % 3600 % 60)
-                print(f"training steps: {total_steps}, loss: {loss: .3f}, left_hms: {time_left_hms}")
+                print(f"epoch: {total_epochs + 1}, training steps: {total_steps + 1}, loss: {loss: .3f}, left_hms: {time_left_hms}")
 
                 wandb_logger.log_dict({'training/lr': scheduler.get_lr()[0]})
 
@@ -125,6 +129,7 @@ def train(args):
 
             # add step
             total_steps += 1
+        total_epochs += 1
 
     PATH = args.output + f'/last.pth'
     torch.save(model.state_dict(), PATH)
@@ -145,14 +150,13 @@ def validate(model, args, logger):
 
 
 if __name__ == '__main__':
-    
     parser = argparse.ArgumentParser()
     parser.add_argument('--name', default='RHWF', help="name your experiment")
     parser.add_argument('--stage', help="determines which dataset to use for training")
     parser.add_argument('--validation', type=str, nargs='+')
     parser.add_argument('--restore_ckpt', help="restore checkpoint")
     
-    parser.add_argument('--gpuid', type=int, nargs='+', default = [0, 1])
+    parser.add_argument('--gpuid', type=int, nargs='+', default = [0])
     parser.add_argument('--output', type=str, default='results/ggearth_6_6', help='output directory to save checkpoints and plots')
     # parser.add_argument('--logname', type=str, default='ggearth_6_6.log', help='printing frequency')
     parser.add_argument('--dataset', type=str, default='ggearth', help='dataset')
@@ -167,7 +171,8 @@ if __name__ == '__main__':
     # parser.add_argument('--print_freq', type=int, default=100, help='printing frequency')
 
     parser.add_argument('--lr', type=float, default=0.0004)
-    parser.add_argument('--num_steps', type=int, default=120000)
+    parser.add_argument('--num_epochs', type=int, default=200)
+    # parser.add_argument('--num_steps', type=int, default=120000)
     parser.add_argument('--batch_size', type=int, default=2)
     parser.add_argument('--image_size', type=int, nargs='+', default=[128, 128])
     parser.add_argument('--wdecay', type=float, default=0.00001)
@@ -187,6 +192,8 @@ if __name__ == '__main__':
     setup_seed(1024)
 
     # sys.stdout = Logger_(args.logname, sys.stdout)
+
+    os.environ["CUDA_VISIBLE_DEVICES"] = "1"
 
     if not os.path.isdir(args.output):
         os.makedirs(args.output)

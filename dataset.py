@@ -23,7 +23,7 @@ class GoogleEarth(Dataset):  # 继承Dataset
                 self.label_path = '/ws/data/Homography/Dataset/GoogleEarth/val2014_label/'
                 self.template_path = '/ws/data/Homography/Dataset/GoogleEarth/val2014_template/'
                 self.template_path_org = '/ws/data/Homography/Dataset/GoogleEarth/val2014_template_original/'
-                print('org_dataset')
+                # print('org_dataset')
 
             if args.dataset=='ggmap':
                 self.img_name = os.listdir('/ws/data/Homography/Dataset/GoogleMap/val2014_input/')
@@ -31,7 +31,7 @@ class GoogleEarth(Dataset):  # 继承Dataset
                 self.label_path = '/ws/data/Homography/Dataset/GoogleMap/val2014_label/'
                 self.template_path = '/ws/data/Homography/Dataset/GoogleMap/val2014_template/'
 
-        print(len(self.img_name))
+        # print(len(self.img_name))
 
     def __len__(self):  # 返回整个数据集的大小
         return len(self.img_name)
@@ -116,5 +116,5 @@ def fetch_dataloader(args, split='train'):
     train_loader = data.DataLoader(train_dataset, batch_size=args.batch_size,
                                    pin_memory=True, shuffle=True, num_workers=8, drop_last=False)
 
-    print('Training with %d image pairs' % len(train_dataset))
+    print(f'{split} with %d image pairs' % len(train_dataset))
     return train_loader
