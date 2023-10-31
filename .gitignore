@@ -9,4 +9,5 @@ __pycache__/
 # save
 checkpoints/
 wandb/
-runs/
+watch/
+results/

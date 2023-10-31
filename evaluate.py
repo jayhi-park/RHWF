@@ -33,11 +33,11 @@ def validate_process(model, args):
         mace = torch.sum((four_pr[0, :, :, :].cpu() - flow_4cor) ** 2, dim=0).sqrt()
         mace_list.append(mace.view(-1).numpy())
         torch.cuda.empty_cache()
-        if i_batch>300:
-            break
+        # if i_batch>300:
+        #     break
 
     model.train()
     mace = np.mean(np.concatenate(mace_list))
     print("Validation MACE: %f" % mace)
-    return {'chairs_mace': mace}
+    return {'val/mace': mace}
 
