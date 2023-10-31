@@ -1,0 +1,12 @@
+# directory
+.idea
+.vscode
+
+# compile
+__pycache__/
+*.pyc
+
+# save
+checkpoints/
+wandb/
+runs/
